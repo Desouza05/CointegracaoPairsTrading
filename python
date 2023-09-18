@@ -1,0 +1,121 @@
+#bibliotecas importadas
+
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot  as plt
+import seaborn as sns
+
+from pandas_datareader import data as pdr
+!pip install yfinance
+import yfinance as yf
+yf.pdr_override()
+
+import statsmodels
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import coint
+
+#importa ações e preço das ações
+                                                                            #Ativos <HYPE>  , <Raia Drogasil> 
+
+ativos = ['HYPE3.SA', 'RADL3.SA']
+start = '2019-01-01'
+end = '2022-01-01'
+
+prices = pdr.get_data_yahoo(ativos , start =start , end = end )['Close'].dropna()
+
+#analise de comportamento da serie
+
+plt.style.use('seaborn')
+
+prices.plot(figsize=(15,10))
+
+#guardando preço dos ativos
+hype = prices[['HYPE3.SA']]
+raia = prices['RADL3.SA']
+
+#calculando a cointegração dos pares
+score, pvaleu, _=coint( hype , raia , maxlag=1)
+print ('Teste do p-valor da cointegração ' +str(pvaleu))
+
+#c Criando costantes 
+
+constante_raio = sm.add_constant(raia)
+
+result_reg = sm.OLS(hype , constante_raia).fit()
+
+raio = prices['RADL3.SA']
+hype = prices['HYPE3.SA']
+
+# Para calcular o spread
+b = result_reg.params['RADL3.SA']
+
+spread = raia - b * hype
+
+# Cria a função para calcular o z-score
+
+def zscore(series):
+    return (series - series.mean()) / np.std(series)
+
+# Plota o z-score
+
+zscore(spread).plot(figsize=(12,6))
+plt.axhline(zscore(spread).mean(), color='black')
+plt.axhline(1.0, color='red', linestyle='--')
+plt.axhline(-1.0, color='green', linestyle='--')
+plt.legend(['Spread z-score', 'Média', '+1', '-1']);
+
+#DataFrame para os sinais 
+sinais=pd.DataFrame()
+sinais['hype']= hype
+sinais['raia']=  raia
+indeces = sinais.hype/ sinais.raia
+
+#Para definir os limetes e encontra o valor de z-score 
+sinais['z'] = zscore(indeces)
+sinais['z_limite_superior'] = np.mean(sinais['z']) + np.std(sinais['z'])
+sinais['z_limite_inferior'] = np.mean(sinais['z']) - np.std(sinais['z'])
+
+sinais['sinais1'] = 0
+sinais['sinais1'] = np.select([sinais['z'] > \
+                                 sinais['z_limite_superior'], sinais['z'] < sinais['z_limite_inferior']], [-1, 1], default=0)
+
+sinais['positions1'] = sinais['sinais1'].diff()
+sinais['sinais2'] = -sinais['sinais1']
+sinais['positions2'] = sinais['sinais2'].diff()
+
+
+#Capital para o investimento 
+capital = 2000
+
+#ordem de comprar 
+p1 = capital // max(sinais['hype'])
+p2 = capital//max(sinais['raia'])
+
+
+#pnl de HYPE.SA
+
+portifolio= pd.DataFrame()
+portifolio['hype'] = sinais['hype']
+portifolio['holding_hype'] = sinais['positions1'].cumsum() * sinais['hype'] * p1
+portifolio['cash_hype'] = capital - (sinais['positions1'] * sinais['hype'] *p1).cumsum()
+portifolio['total_hype'] = portifolio['holding_hype'] + portifolio['cash_hype']
+portifolio['return_hype'] = portifolio['total_hype'].pct_change()
+portifolio['positions1'] = sinais['positions1']
+
+#pnl de Raio Drogasil
+
+portifolio['raia'] = sinais['raia']
+portifolio['holding_raia'] = sinais['positions2'].cumsum() * sinais['raia'] * p2
+portifolio['cash_raia'] = capital - (sinais['positions2'] * sinais['raia'] * p2).cumsum()
+portifolio['total_raia'] = portifolio['holding_raia'] + portifolio['cash_raia']
+portifolio['return_raia'] = portifolio['total_raia'].pct_change()
+portifolio['positions2'] = sinais['positions2']
+
+portifolio ['total'] = portifolio['total_hype'] + portifolio['total_raia']
+
+#Plotando grafico de retorno do portifolio 
+
+portifolio=portifolio.dropna()
+plt.figure(figsize=(15,10/)
+plt.plot(portifolio['total'])
